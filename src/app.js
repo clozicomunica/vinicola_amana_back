@@ -20,4 +20,8 @@ app.use("/api/products", productRoutes);
 
 app.use(errorHandler);
 
+app.get("/", (req, res) => {
+  res.send("Backend está rodando!");
+});
+
 module.exports = app;
