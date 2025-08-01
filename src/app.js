@@ -8,7 +8,7 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use("/auth", authRoutes);
+app.use("/", authRoutes);
 
 const limiter = rateLimit({
   windowMs: 60 * 1000,
