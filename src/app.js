@@ -3,12 +3,11 @@ const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const productRoutes = require("./routes/products.routes");
 const errorHandler = require("./middlewares/error.middleware");
-const authRoutes = require("./routes/auth.routes");
+
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use("/", authRoutes);
 
 const limiter = rateLimit({
   windowMs: 60 * 1000,
