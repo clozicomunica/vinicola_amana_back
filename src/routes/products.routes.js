@@ -5,14 +5,14 @@ const {
   listProducts,
   getProductById,
   getSimilarProducts,
-  checkOutOrder,
+  checkoutOrder,
 } = require("../controllers/products.controller");
 
 router.get("/", listProducts);
 router.get("/:id", getProductById);
 router.get("/:id/similares", getSimilarProducts);
 
-// ✅ Correção aqui:
-router.post("/checkout", checkOutOrder);
+// 🛠️ Aqui estava o erro!
+router.post("/checkout", checkoutOrder);
 
 module.exports = router;
