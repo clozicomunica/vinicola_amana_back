@@ -59,4 +59,5 @@ async function fetchProductById(id) {
 module.exports = {
   fetchProducts,
   fetchProductById,
+  api,
 };

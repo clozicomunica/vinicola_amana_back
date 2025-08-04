@@ -1,6 +1,7 @@
 const {
   fetchProducts,
   fetchProductById,
+  api,
 } = require("../services/nuvemshop.service");
 
 // Lista produtos
@@ -95,8 +96,56 @@ async function getSimilarProducts(req, res, next) {
   }
 }
 
+// Finaliza o pedido e redireciona pra Nuvemshop
+async function checkoutOrder(req, res, next) {
+  try {
+    const { items, customer } = req.body; // Espera itens do carrinho e dados do cliente do frontend
+
+    // Validação básica
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res
+        .status(400)
+        .json({ error: "Itens do carrinho são obrigatórios" });
+    }
+
+    // Mapeia os itens pra formato da API da Nuvemshop
+    const cartItems = items.map((item) => ({
+      product_id: item.id,
+      quantity: item.quantity || 1,
+      variant_id: item.variant_id || null, // Se houver variantes
+    }));
+
+    // Dados do cliente (ajuste conforme necessário)
+    const customerData = {
+      email: customer.email || "cliente@example.com",
+      name: customer.name || "Cliente Anônimo",
+      document: customer.document || "00000000000", // CPF/CNPJ temporário, ajuste no frontend
+    };
+
+    // Chama a API da Nuvemshop pra criar o carrinho
+    const response = await api.post("/carts", {
+      items: cartItems,
+      customer: customerData,
+      redirect_url: "https://vinicola-amana-back.onrender.com/checkout-success", // URL de sucesso (ajuste)
+      cancel_url: "https://vinicola-amana-back.onrender.com/checkout-cancel", // URL de cancelamento (ajuste)
+    });
+
+    // Redireciona pro URL de checkout retornado pela Nuvemshop
+    const checkoutUrl = response.data.checkout_url;
+    if (checkoutUrl) {
+      return res.redirect(303, checkoutUrl); // Redireciona pro checkout da Nuvemshop
+    } else {
+      return res.status(500).json({ error: "URL de checkout não gerada" });
+    }
+  } catch (err) {
+    console.error("Erro ao criar checkout:", err);
+    next(err);
+  }
+}
+
 module.exports = {
   listProducts,
   getProductById,
   getSimilarProducts,
+  checkoutOrder,
 };
