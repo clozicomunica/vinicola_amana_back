@@ -138,11 +138,13 @@ async function checkoutOrder(req, res, next) {
       return res.status(500).json({ error: "URL de checkout não gerada" });
     }
   } catch (err) {
-    console.error("Erro ao criar checkout:", err);
-
-    // Retorna a mensagem do erro para o frontend para melhor debug
-    const message = err?.response?.data || err.message || err.toString();
-    return res.status(500).json({ error: message });
+    console.error(
+      "Erro ao criar checkout:",
+      JSON.stringify(err.response?.data || err.message || err, null, 2)
+    );
+    return res.status(500).json({
+      error: err.response?.data || err.message || "Erro desconhecido",
+    });
   }
 }
 
