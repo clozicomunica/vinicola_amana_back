@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+
 const {
   listProducts,
   getProductById,
@@ -10,6 +11,8 @@ const {
 router.get("/", listProducts);
 router.get("/:id", getProductById);
 router.get("/:id/similares", getSimilarProducts);
+
+// ✅ Correção aqui:
 router.post("/checkout", checkOutOrder);
 
 module.exports = router;
