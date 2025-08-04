@@ -14,6 +14,7 @@ async function listProducts(req, res, next) {
       category,
       search,
     } = req.query;
+
     const data = await fetchProducts({
       page,
       per_page,
@@ -21,6 +22,7 @@ async function listProducts(req, res, next) {
       category,
       search,
     });
+
     res.json(data);
   } catch (err) {
     next(err);
@@ -62,7 +64,7 @@ async function getSimilarProducts(req, res, next) {
     const regiaoAtual = currentProduct.region;
     const precoAtual = parseFloat(currentProduct.variants?.[0]?.price || "0");
 
-    // 1️⃣ Tenta encontrar produtos bem similares
+    // 1️⃣ Produtos bem similares
     let similares = outrosProdutos.filter((p) => {
       const categoriaProduto = p.categories?.[0]?.name?.pt;
       const regiaoProduto = p.region;
@@ -90,55 +92,50 @@ async function getSimilarProducts(req, res, next) {
       similares = outrosProdutos;
     }
 
-    res.json(similares.slice(0, 6)); // máximo 6
+    res.json(similares.slice(0, 6));
   } catch (err) {
     next(err);
   }
 }
 
-// Finaliza o pedido e redireciona pra Nuvemshop
+// Finaliza o pedido e redireciona pro checkout da Nuvemshop
 async function checkoutOrder(req, res, next) {
   try {
-    const { items, customer } = req.body; // Espera itens do carrinho e dados do cliente do frontend
+    const { items, customer } = req.body;
 
-    // Validação básica
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res
         .status(400)
         .json({ error: "Itens do carrinho são obrigatórios" });
     }
 
-    // Mapeia os itens pra formato da API da Nuvemshop
     const cartItems = items.map((item) => ({
       product_id: item.id,
       quantity: item.quantity || 1,
-      variant_id: item.variant_id || null, // Se houver variantes
+      variant_id: item.variant_id || null,
     }));
 
-    // Dados do cliente (ajuste conforme necessário)
     const customerData = {
       email: customer.email || "cliente@example.com",
       name: customer.name || "Cliente Anônimo",
-      document: customer.document || "00000000000", // CPF/CNPJ temporário, ajuste no frontend
+      document: customer.document || "00000000000",
     };
 
-    // Chama a API da Nuvemshop pra criar o carrinho
     const response = await api.post("/carts", {
       items: cartItems,
       customer: customerData,
-      redirect_url: "https://vinicola-amana-back.onrender.com/checkout-success", // URL de sucesso (ajuste)
-      cancel_url: "https://vinicola-amana-back.onrender.com/checkout-cancel", // URL de cancelamento (ajuste)
+      redirect_url: "https://vinicola-amana-back.onrender.com/checkout-success",
+      cancel_url: "https://vinicola-amana-back.onrender.com/checkout-cancel",
     });
 
-    // Redireciona pro URL de checkout retornado pela Nuvemshop
     const checkoutUrl = response.data.checkout_url;
     if (checkoutUrl) {
-      return res.redirect(303, checkoutUrl); // Redireciona pro checkout da Nuvemshop
+      return res.redirect(303, checkoutUrl);
     } else {
       return res.status(500).json({ error: "URL de checkout não gerada" });
     }
   } catch (err) {
-    console.error("Erro ao criar checkout:", err);
+    console.error("Erro ao criar checkout:", err.response?.data || err.message);
     next(err);
   }
 }
@@ -147,5 +144,5 @@ module.exports = {
   listProducts,
   getProductById,
   getSimilarProducts,
-  checkoutOrder,
+  checkoutOrder, // ✅ Nome certo para o router
 };
