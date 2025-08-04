@@ -96,7 +96,7 @@ async function getSimilarProducts(req, res, next) {
   }
 }
 
-// Finaliza o pedido e redireciona pra Nuvemshop
+// Finaliza o pedido e redireciona pra Nuvemshop (API correta /checkouts)
 async function checkoutOrder(req, res, next) {
   try {
     const { items, customer } = req.body; // Espera itens do carrinho e dados do cliente do frontend
@@ -108,32 +108,31 @@ async function checkoutOrder(req, res, next) {
         .json({ error: "Itens do carrinho são obrigatórios" });
     }
 
-    // Mapeia os itens pra formato da API da Nuvemshop
-    const cartItems = items.map((item) => ({
-      product_id: item.id,
+    // Atenção: usar variant_id conforme doc, pois checkout API exige variant_id
+    const checkoutItems = items.map((item) => ({
+      variant_id: item.variant_id, // obrigatório para checkout
       quantity: item.quantity || 1,
-      variant_id: item.variant_id || null, // Se houver variantes
     }));
 
-    // Dados do cliente (ajuste conforme necessário)
-    const customerData = {
-      email: customer.email || "cliente@example.com",
-      name: customer.name || "Cliente Anônimo",
-      document: customer.document || "00000000000", // CPF/CNPJ temporário, ajuste no frontend
+    const checkoutPayload = {
+      checkout: {
+        items: checkoutItems,
+        customer: {
+          email: customer.email || "cliente@example.com",
+          name: customer.name || "Cliente Anônimo",
+          document: customer.document || "00000000000", // CPF/CNPJ temporário
+        },
+        redirect_url:
+          "https://vinicola-amana-back.onrender.com/checkout-success",
+        cancel_url: "https://vinicola-amana-back.onrender.com/checkout-cancel",
+      },
     };
 
-    // Chama a API da Nuvemshop pra criar o carrinho
-    const response = await api.post("/carts", {
-      items: cartItems,
-      customer: customerData,
-      redirect_url: "https://vinicola-amana-back.onrender.com/checkout-success", // URL de sucesso (ajuste)
-      cancel_url: "https://vinicola-amana-back.onrender.com/checkout-cancel", // URL de cancelamento (ajuste)
-    });
+    const response = await api.post("/checkouts", checkoutPayload);
 
-    // Redireciona pro URL de checkout retornado pela Nuvemshop
-    const checkoutUrl = response.data.checkout_url;
+    const checkoutUrl = response.data.checkout.checkout_url;
     if (checkoutUrl) {
-      return res.redirect(303, checkoutUrl); // Redireciona pro checkout da Nuvemshop
+      return res.redirect(303, checkoutUrl); // redireciona para checkout da Nuvemshop
     } else {
       return res.status(500).json({ error: "URL de checkout não gerada" });
     }
