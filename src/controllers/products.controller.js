@@ -6,8 +6,20 @@ const {
 // Lista produtos
 async function listProducts(req, res, next) {
   try {
-    const { page = 1, per_page = 10, published = true } = req.query;
-    const data = await fetchProducts({ page, per_page, published });
+    const {
+      page = 1,
+      per_page = 10,
+      published = true,
+      category,
+      search,
+    } = req.query;
+    const data = await fetchProducts({
+      page,
+      per_page,
+      published,
+      category,
+      search,
+    });
     res.json(data);
   } catch (err) {
     next(err);
