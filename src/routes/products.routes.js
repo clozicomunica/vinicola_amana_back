@@ -10,6 +10,6 @@ const {
 router.get("/", listProducts);
 router.get("/:id", getProductById);
 router.get("/:id/similares", getSimilarProducts);
-router.post("produtos/checkout", checkoutOrder);
+router.post("products/checkout", checkoutOrder);
 
 module.exports = router;
