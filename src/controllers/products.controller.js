@@ -139,7 +139,10 @@ async function checkoutOrder(req, res, next) {
     }
   } catch (err) {
     console.error("Erro ao criar checkout:", err);
-    next(err);
+
+    // Retorna a mensagem do erro para o frontend para melhor debug
+    const message = err?.response?.data || err.message || err.toString();
+    return res.status(500).json({ error: message });
   }
 }
 
