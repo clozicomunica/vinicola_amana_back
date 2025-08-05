@@ -14,7 +14,7 @@ if (!USER_AGENT || !STORE_ID || !ACCESS_TOKEN) {
 const api = axios.create({
   baseURL: BASE_URL,
   headers: {
-    Authentication: `bearer ${ACCESS_TOKEN}`,
+    Authorization: `bearer ${ACCESS_TOKEN}`,
     "User-Agent": USER_AGENT,
     "Content-Type": "application/json",
     Accept: "application/json",
