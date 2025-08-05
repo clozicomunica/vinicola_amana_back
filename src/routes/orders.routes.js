@@ -33,7 +33,7 @@ router.post("/checkout", async (req, res) => {
         {
           method: "GET",
           headers: {
-            Authentication: `bearer ${ACCESS_TOKEN}`, // Mesmo token
+            Authentication: `Bearer ${process.env.TOKEN}`, // Corrigido para usar process.env.TOKEN
             "Content-Type": "application/json",
           },
         }

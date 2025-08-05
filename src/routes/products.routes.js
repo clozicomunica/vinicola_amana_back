@@ -12,7 +12,7 @@ router.get("/", listProducts);
 router.get("/:id", getProductById);
 router.get("/:id/similares", getSimilarProducts);
 
-// 🛠️ Aqui estava o erro!
-router.post("/checkout", checkoutOrder);
+// 🛠️ Remova esta linha
+// router.post("/checkout", checkoutOrder);
 
 module.exports = router;
