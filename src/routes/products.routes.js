@@ -5,7 +5,6 @@ const {
   listProducts,
   getProductById,
   getSimilarProducts,
-  checkoutOrder,
 } = require("../controllers/products.controller");
 
 router.get("/", listProducts);
