@@ -2,7 +2,7 @@ const axios = require("axios");
 
 const USER_AGENT = process.env.NUVEMSHOP_USER_AGENT;
 const STORE_ID = process.env.NUVEMSHOP_STORE_ID;
-const BASE_URL = `https://api.nuvemshop.com.br/v1/${STORE_ID}`;
+const BASE_URL = `https://api.tiendanube.com/v1/${STORE_ID}`;
 const ACCESS_TOKEN = process.env.NUVEMSHOP_ACCESS_TOKEN;
 
 if (!USER_AGENT || !STORE_ID || !ACCESS_TOKEN) {
