@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const productRoutes = require("./routes/products.routes");
+const authRoutes = require("./routes/auth.routes"); // Adicione esta linha
 const errorHandler = require("./middlewares/error.middleware");
 
 const app = express();
@@ -16,7 +17,8 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-app.use("/api/products", productRoutes);
+app.use("/api/products", productRoutes); // Rotas de produtos
+app.use("/auth", authRoutes); // Adicione esta linha pra rotas de autenticação
 
 app.use(errorHandler);
 
