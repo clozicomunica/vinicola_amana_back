@@ -37,7 +37,6 @@ async function getProductById(req, res, next) {
     next(err);
   }
 }
-
 // Produtos similares com fallback inteligente
 async function getSimilarProducts(req, res, next) {
   try {
