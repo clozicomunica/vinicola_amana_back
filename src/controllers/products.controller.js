@@ -96,49 +96,40 @@ async function getSimilarProducts(req, res, next) {
   }
 }
 
-// Finaliza o pedido e redireciona pra Nuvemshop (API correta /checkouts)
+// Finaliza o pedido usando a API oficial da Nuvemshop (/orders)
 async function checkoutOrder(req, res, next) {
   try {
-    const { items, customer } = req.body; // Espera itens do carrinho e dados do cliente do frontend
+    const { items, customer } = req.body;
 
-    // Validação básica
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res
         .status(400)
         .json({ error: "Itens do carrinho são obrigatórios" });
     }
 
-    // Atenção: usar variant_id conforme doc, pois checkout API exige variant_id
-    const checkoutItems = items.map((item) => ({
-      variant_id: item.variant_id, // obrigatório para checkout
+    const orderItems = items.map((item) => ({
+      variant_id: item.variant_id,
       quantity: item.quantity || 1,
     }));
 
-    const checkoutPayload = {
-      checkout: {
-        items: checkoutItems,
+    const orderPayload = {
+      order: {
         customer: {
           email: customer.email || "cliente@example.com",
           name: customer.name || "Cliente Anônimo",
-          document: customer.document || "00000000000", // CPF/CNPJ temporário
+          document: customer.document || "00000000000",
         },
-        redirect_url:
-          "https://vinicola-amana-back.onrender.com/checkout-success",
-        cancel_url: "https://vinicola-amana-back.onrender.com/checkout-cancel",
+        line_items: orderItems,
       },
     };
 
-    const response = await api.post("/checkouts", checkoutPayload);
+    const response = await api.post("/orders", orderPayload);
 
-    const checkoutUrl = response.data.checkout.checkout_url;
-    if (checkoutUrl) {
-      return res.redirect(303, checkoutUrl); // redireciona para checkout da Nuvemshop
-    } else {
-      return res.status(500).json({ error: "URL de checkout não gerada" });
-    }
+    // Responde com os dados do pedido criado
+    return res.status(201).json(response.data);
   } catch (err) {
     console.error(
-      "Erro ao criar checkout:",
+      "Erro ao criar pedido:",
       JSON.stringify(err.response?.data || err.message || err, null, 2)
     );
     return res.status(500).json({
