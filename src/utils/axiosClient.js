@@ -1,4 +1,5 @@
 const axios = require("axios");
+require("dotenv").config();
 
 const USER_AGENT = process.env.NUVEMSHOP_USER_AGENT;
 const STORE_ID = process.env.NUVEMSHOP_STORE_ID;
