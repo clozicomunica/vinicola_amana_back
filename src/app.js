@@ -4,7 +4,7 @@ const rateLimit = require("express-rate-limit");
 const productRoutes = require("./routes/products.routes");
 const authRoutes = require("./routes/auth.routes");
 const errorHandler = require("./middlewares/error.middleware");
-const orderRoutes = require("./routes/orders.routes"); // Adicione esta linha
+const orderRoutes = require("./routes/orders.routes"); // Já adicionado
 
 const app = express();
 
@@ -18,9 +18,9 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-app.use("/api/products", productRoutes); // Rotas de produtos
-app.use("/auth", authRoutes); // Rotas de autenticação
-app.use("/api/orders", orderRoutes); // Adicione esta linha pra rotas de pedidos
+app.use("/api/products", productRoutes); // Mantém se necessário
+app.use("/auth", authRoutes);
+app.use("/api/orders", orderRoutes); // Confirme que está ativo
 
 app.use(errorHandler);
 
