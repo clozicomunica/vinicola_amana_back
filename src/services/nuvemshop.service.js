@@ -5,6 +5,7 @@ const categoryMap = {
   tinto: 31974513, // Categoria pai "Vinho"
   branco: 31974513,
   rose: 31974513,
+  rosé: 31974513,
   amana: 31974539,
   una: 31974540,
   singular: 32613020,
@@ -34,7 +35,8 @@ async function fetchProducts({ page, per_page, published, category, search }) {
 
   const categoryLower = category ? category.toLowerCase() : null;
   const isWineType =
-    categoryLower && ["tinto", "branco", "rose"].includes(categoryLower);
+    categoryLower &&
+    ["tinto", "branco", "rose", "rosé"].includes(categoryLower);
 
   if (category && categoryMap[categoryLower]) {
     if (!isWineType) {
@@ -81,7 +83,7 @@ async function fetchProducts({ page, per_page, published, category, search }) {
       product.variants.some((variant) =>
         variant.values.some((value) => {
           const valPt = cleanString(value.pt || "");
-          return valPt === normalizedType;
+          return valPt === normalizedType || valPt === cleanString("rosé");
         })
       )
     );
