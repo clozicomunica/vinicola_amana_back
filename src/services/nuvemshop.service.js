@@ -16,6 +16,15 @@ const categoryMap = {
   "vale-presente": 31974530,
 };
 
+// Função para limpar strings: minúsculas, remove acentos e trim espaços
+function cleanString(str) {
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
 async function fetchProducts({ page, per_page, published, category, search }) {
   let params = {
     page,
@@ -23,19 +32,18 @@ async function fetchProducts({ page, per_page, published, category, search }) {
     published,
   };
 
-  // Se categoria for tinto, branco ou rose, usamos a categoria pai 31974513 e filtramos localmente depois
+  const categoryLower = category ? category.toLowerCase() : null;
   const isWineType =
-    category && ["tinto", "branco", "rose"].includes(category.toLowerCase());
+    categoryLower && ["tinto", "branco", "rose"].includes(categoryLower);
 
-  if (category && categoryMap[category.toLowerCase()]) {
-    // Se for tipo vinho (tinto/branco/rose), busca categoria pai sem filtro extra na API
+  if (category && categoryMap[categoryLower]) {
     if (!isWineType) {
-      params.category_id = categoryMap[category.toLowerCase()];
+      params.category_id = categoryMap[categoryLower];
       console.log(
         `Filtro por categoria aplicado: category_id = ${params.category_id}`
       );
     } else {
-      // Para tinto/branco/rose, filtra depois, então só usa categoria pai
+      // Para tinto, branco e rose, usa categoria pai e filtra localmente
       params.category_id = 31974513;
       console.log(
         `Busca categoria pai "Vinho" para filtrar localmente: category_id = ${params.category_id}`
@@ -57,19 +65,22 @@ async function fetchProducts({ page, per_page, published, category, search }) {
 
   let products = response.data;
 
-  // Se for tipo vinho, filtra localmente pelos valores das variações
+  // Debug: log valores das variações para verificar "Rosé" etc
+  products.forEach((product) => {
+    product.variants.forEach((variant) => {
+      variant.values.forEach((value) => {
+        console.log(`Variant value.pt original: "${value.pt}"`);
+      });
+    });
+  });
+
   if (isWineType) {
-    const normalizedType = category
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
+    const normalizedType = cleanString(category);
+
     products = products.filter((product) =>
       product.variants.some((variant) =>
         variant.values.some((value) => {
-          const valPt = value.pt
-            ?.toLowerCase()
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "");
+          const valPt = cleanString(value.pt || "");
           return valPt === normalizedType;
         })
       )
