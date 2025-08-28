@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const api = require("../axiosClient"); // Ajuste se o path for diferente; use o cliente Axios existente
+const api = require("../utils/axiosClient"); // Ajuste se o path for diferente; use o cliente Axios existente
 require("dotenv").config();
 
 router.post("/checkout", async (req, res) => {
