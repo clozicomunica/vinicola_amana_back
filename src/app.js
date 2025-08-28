@@ -8,6 +8,9 @@ const orderRoutes = require("./routes/orders.routes"); // Já adicionado
 
 const app = express();
 
+const webhookRoutes = require("./routes/webhooks.routes"); // Crie esse arquivo novo
+app.use("/webhooks", webhookRoutes);
+
 app.use(cors());
 app.use(express.json());
 

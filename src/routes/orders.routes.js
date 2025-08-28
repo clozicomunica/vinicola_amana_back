@@ -1,51 +1,54 @@
 const express = require("express");
 const router = express.Router();
-const { api } = require("../services/nuvemshop.service");
+const api = require("../axiosClient"); // Ajuste se o path for diferente; use o cliente Axios existente
 require("dotenv").config();
 
 router.post("/checkout", async (req, res) => {
   try {
     const orderData = req.body;
 
+    // Garanta que o gateway esteja setado (ex.: mercadopago)
+    if (!orderData.gateway) {
+      return res.status(400).json({ error: "Gateway de pagamento é obrigatório (ex.: mercadopago)" });
+    }
+
     // Enviar pedido para Nuvemshop
-    const response = await api.post("/orders", orderData, {
-      headers: {
-        Authentication: `bearer ${process.env.NUVEMSHOP_ACCESS_TOKEN}`, // Correto
-        "User-Agent": "Vinicola (amana.lojaonline@gmail.com)",
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-    });
+    const response = await api.post("/orders", orderData);
 
-    const data = response.data;
+    let data = response.data;
 
-    // Se não tiver checkout_url, tenta obter via /orders/:id/checkout
+    // Tente obter checkout_url via GET /orders/:id (buscando campos como checkout_url ou gateway_link)
     if (!data.checkout_url && data.id) {
       try {
-        const checkoutResponse = await api.get(`/orders/${data.id}`, {
-          headers: {
-            Authentication: `bearer ${process.env.NUVEMSHOP_ACCESS_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-        });
-        if (checkoutResponse.data?.redirect_url) {
-          data.checkout_url = checkoutResponse.data.redirect_url;
+        const orderDetails = await api.get(`/orders/${data.id}`);
+        const details = orderDetails.data;
+        if (details.checkout_url) {
+          data.checkout_url = details.checkout_url;
+        } else if (details.gateway_link) {
+          data.checkout_url = details.gateway_link; // Algumas gateways fornecem isso
+        } else if (details.redirect_url) {
+          data.checkout_url = details.redirect_url;
         }
       } catch (err) {
-        console.warn("Erro ao buscar checkout_url:", err.message);
+        console.warn("Erro ao buscar detalhes da ordem para checkout_url:", err.message);
       }
     }
 
-    // Fallback manual
+    // Fallback manual para URL de checkout da Nuvemshop
     if (!data.checkout_url && data.id) {
       data.checkout_url = `${process.env.STORE_DOMAIN}/checkout/${data.id}`;
+    }
+
+    // Se ainda não tiver URL, erro
+    if (!data.checkout_url) {
+      throw new Error("Não foi possível gerar URL de checkout");
     }
 
     res.json(data);
   } catch (error) {
     console.error("Erro no checkout:", error.response?.data || error.message);
     res.status(500).json({
-      error: error.response?.data || "Erro ao processar o checkout",
+      error: error.response?.data?.message || "Erro ao processar o checkout",
     });
   }
 });
