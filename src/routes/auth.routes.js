@@ -22,7 +22,7 @@ router.get("/callback", async (req, res) => {
         params: {
           client_id: CLIENT_ID,
           client_secret: CLIENT_SECRET,
-          grant_type: "authorization_code, read_payments", 
+          grant_type: "authorization_code", 
           code,
           redirect_uri: REDIRECT_URI,
         },
