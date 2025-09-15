@@ -12,12 +12,13 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "axios": "^1.11.0",
+    "axios": "^1.12.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "express-rate-limit": "^8.0.1",
     "fs": "^0.0.1-security",
+    "mercadopago": "^2.9.0",
     "node-fetch": "^3.3.2",
     "nodemon": "^3.1.10"
   }

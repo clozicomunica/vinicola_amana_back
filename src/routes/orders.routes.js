@@ -1,54 +1,61 @@
 const express = require("express");
 const router = express.Router();
-const api = require("../utils/axiosClient"); // Ajuste se o path for diferente; use o cliente Axios existente
+const { MercadoPagoConfig, Preference } = require("mercadopago");
 require("dotenv").config();
 
-router.post("/checkout", async (req, res) => {
+// Configura Mercado Pago
+const mpClient = new MercadoPagoConfig({
+  accessToken: process.env.MP_ACCESS_TOKEN, // deixe o token no .env
+});
+
+// Armazenamento temporário (substitua por MongoDB/Redis em produção)
+const tempStorage = new Map();
+
+// Endpoint para criar checkout com Mercado Pago Checkout Pro
+router.post("/create-checkout", async (req, res) => {
   try {
-    const orderData = req.body;
+    const { produtos, cliente, total } = req.body;
 
-    // Garanta que o gateway esteja setado (ex.: mercadopago)
-    if (!orderData.gateway) {
-      return res.status(400).json({ error: "Gateway de pagamento é obrigatório (ex.: mercadopago)" });
+    // Validação básica
+    if (!produtos?.length || !cliente?.name || !cliente?.email || !cliente?.document || !total) {
+      return res.status(400).json({ error: "Dados incompletos (produtos, cliente ou total)" });
     }
 
-    // Enviar pedido para Nuvemshop
-    const response = await api.post("/orders", orderData);
+    const preference = new Preference(mpClient);
 
-    let data = response.data;
+    const response = await preference.create({
+      body: {
+        items: produtos.map(item => ({
+          title: item.name,
+          quantity: item.quantity,
+          unit_price: Number(item.price),
+          currency_id: "BRL",
+        })),
+        payer: {
+          name: cliente.name,
+          email: cliente.email,
+          identification: { type: "CPF", number: cliente.document },
+        },
+        back_urls: {
+          success: "https://vinicola-amana.com/success", // Troque pelo seu domínio real
+          pending: "https://vinicola-amana.com/pending",
+          failure: "https://vinicola-amana.com/failure",
+        },
+        auto_return: "approved",
+        external_reference: `order_${Date.now()}`,
+      },
+    });
 
-    // Tente obter checkout_url via GET /orders/:id (buscando campos como checkout_url ou gateway_link)
-    if (!data.checkout_url && data.id) {
-      try {
-        const orderDetails = await api.get(`/orders/${data.id}`);
-        const details = orderDetails.data;
-        if (details.checkout_url) {
-          data.checkout_url = details.checkout_url;
-        } else if (details.gateway_link) {
-          data.checkout_url = details.gateway_link; // Algumas gateways fornecem isso
-        } else if (details.redirect_url) {
-          data.checkout_url = details.redirect_url;
-        }
-      } catch (err) {
-        console.warn("Erro ao buscar detalhes da ordem para checkout_url:", err.message);
-      }
-    }
+    const init_point = response.init_point; // URL para redirecionar o cliente
 
-    // Fallback manual para URL de checkout da Nuvemshop
-    if (!data.checkout_url && data.id) {
-      data.checkout_url = `${process.env.STORE_DOMAIN}/checkout/${data.id}`;
-    }
+    // Armazena dados temporariamente para uso no webhook
+    tempStorage.set(response.external_reference, { produtos, cliente, total });
 
-    // Se ainda não tiver URL, erro
-    if (!data.checkout_url) {
-      throw new Error("Não foi possível gerar URL de checkout");
-    }
-
-    res.json(data);
+    res.json({ redirect_url: init_point });
   } catch (error) {
-    console.error("Erro no checkout:", error.response?.data || error.message);
+    console.error("Erro ao criar checkout:", error.response?.data || error.message);
     res.status(500).json({
-      error: error.response?.data?.message || "Erro ao processar o checkout",
+      error: error.response?.data?.message || "Erro ao criar checkout",
     });
   }
 });
