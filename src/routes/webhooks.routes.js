@@ -103,10 +103,10 @@ router.post("/store-redact", express.raw({ type: "application/json" }), async (r
   const rawBody = req.body.toString("utf-8");
   const hmacHeader = req.headers["x-linkedstore-hmac-sha256"] || req.headers["http_x_linkedstore_hmac_sha256"];
 
-  // if (!verifyWebhook(rawBody, hmacHeader)) {
-  //   console.error("❌ HMAC inválido em store-redact");
-  //   return res.status(401).send("Assinatura inválida");
-  // }
+  if (!verifyWebhook(rawBody, hmacHeader)) {
+    console.error("❌ HMAC inválido em store-redact");
+    return res.status(401).send("Assinatura inválida");
+  }
 
   const { store_id } = JSON.parse(rawBody);
   console.log(`🧹 LGPD: Deletando dados da loja ${store_id}`);
