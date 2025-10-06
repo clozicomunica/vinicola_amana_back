@@ -5,15 +5,13 @@ const axios = require("../utils/axiosClient");
 require("dotenv").config();
 const crypto = require("crypto");
 
-// Mercado Pago
 const mpClient = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN,
 });
 
-// Segredo do app da Nuvemshop
 const APP_SECRET = process.env.NUVEMSHOP_CLIENT_SECRET;
 
-// ⚠️ Armazenamento temporário apenas para demo — use DB em produção
+
 const tempStorage = new Map();
 
 /* ------------------------------ PAGAMENTO APROVADO ------------------------------ */

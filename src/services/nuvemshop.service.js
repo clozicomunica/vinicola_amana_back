@@ -2,7 +2,7 @@ const api = require("../utils/axiosClient");
 
 // Mapeamento fixo de categorias para category_id baseado nos dados da Nuvemshop
 const categoryMap = {
-  tinto: 31974513, // Categoria pai "Vinho"
+  tinto: 31974513, 
   branco: 31974513,
   rose: 31974513,
   rosé: 31974513,
