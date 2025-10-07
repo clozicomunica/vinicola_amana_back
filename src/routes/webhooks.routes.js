@@ -1,76 +1,54 @@
+// routes/webhooks.routes.js (patch)
 const express = require("express");
 const router = express.Router();
 const { MercadoPagoConfig, Payment } = require("mercadopago");
-const axios = require("../utils/axiosClient"); // seu client p/ Nuvemshop
-require("dotenv").config();
+const axios = require("../axiosClient"); // <- caminho corrigido
 const crypto = require("crypto");
 
-/** ======== CONFIG ======== */
-const mpClient = new MercadoPagoConfig({
-  accessToken: process.env.MP_ACCESS_TOKEN, // APP_USR-... (produção)
-});
-
+const mpClient = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
 const APP_SECRET = process.env.NUVEMSHOP_CLIENT_SECRET;
 
-/**
- * ✅ DICA: garanta no app principal:
- * app.use(express.json());
- * app.use("/webhooks", require("./routes/webhooks.routes"));
- */
+// GET ping
+router.get("/order-paid", (req, res) => res.status(200).send("OK"));
 
-/* ------------------------------ HEALTH/PING ------------------------------ */
-// Mercado Pago às vezes acessa GET para verificar se a rota responde.
-router.get("/order-paid", (req, res) => {
-  return res.status(200).send("OK");
-});
-
-/* ------------------------------ MP: PAGAMENTO APROVADO ------------------------------ */
-router.post("/order-paid", async (req, res) => {
-  // Ex: { "type": "payment", "data": { "id": 123456789 } }
-  const { type, data } = req.body || {};
-
-  if (type !== "payment" || !data?.id) {
-    // Não é evento de pagamento → ignora
-    return res.status(200).json({ status: "ignored" });
-  }
+// POST payment (usar JSON só aqui)
+router.post("/order-paid", express.json(), async (req, res) => {
+  // ACK o mais rápido possível
+  res.status(200).json({ status: "received" });
 
   try {
+    // Suportar body e/ou query
+    const type = req.body?.type || req.query?.type;
+    const dataId = req.body?.data?.id || req.query?.["data.id"];
+
+    if (type !== "payment" || !dataId) return;
+
     const paymentClient = new Payment(mpClient);
-    const payment = await paymentClient.get({ id: data.id });
+    const payment = await paymentClient.get({ id: dataId });
 
-    // Log mínimo para correlação
-    console.log("[MP Webhook] payment_id:", payment.id, "status:", payment.status);
+    if (payment.status !== "approved") return;
 
-    if (payment.status !== "approved") {
-      // Não aprovado ainda → responde 200 para evitar retries agressivos
-      return res.status(200).json({ status: "not-approved" });
-    }
-
-    // Pegue os dados necessários da transação
-    const external_reference = payment.external_reference; // seu id do pedido
+    const external_reference = payment.external_reference;
     const meta = payment.metadata || {};
-
-    // ✅ AQUI ESTÁ A MUDANÇA: buscar dados nos metadados enviados na preferência
     const produtos = meta.produtos;
     const cliente = meta.cliente;
     const total = meta.total;
 
     if (!produtos || !cliente || !total) {
-      // Fallback ideal: buscar em seu DB por external_reference
-      console.error("❌ Metadados ausentes no pagamento. external_reference:", external_reference);
-      return res.status(400).json({ error: "Dados do pedido não encontrados nos metadados" });
+      console.error("Metadados ausentes, external_reference:", external_reference);
+      return;
     }
 
-    // (Opcional) Validações adicionais de segurança
-    // - payment.transaction_amount === Number(total)
-    // - payment.currency_id === "BRL"
-    // - conferir external_reference
+    // Idempotência simples (ex.: checar se já criamos ordem por payment.id)
+    // Exemplo de chamada a um endpoint seu/DB antes de criar na Nuvemshop:
+    // const already = await Orders.findOne({ paymentId: String(payment.id) });
+    // if (already) return;
 
     const payload = {
       gateway: "offline",
       payment_status: "paid",
       paid_at: new Date().toISOString().replace("Z", "-03:00"),
-      products: produtos.map((item) => ({
+      products: produtos.map(item => ({
         variant_id: item.variant_id || 0,
         quantity: item.quantity,
         price: Number(item.price),
@@ -83,7 +61,7 @@ router.post("/order-paid", async (req, res) => {
       billing_address: {
         address: cliente.address,
         city: cliente.city,
-        province: "SP", // ajuste se tiver UF real
+        province: "SP",
         country: "BR",
         zipcode: cliente.zipcode,
       },
@@ -97,27 +75,19 @@ router.post("/order-paid", async (req, res) => {
       shipping_pickup_type: "ship",
       shipping: "Correios",
       shipping_option: "PAC",
-      shipping_cost_customer: 10.0, // ajuste se tiver cálculo real
+      shipping_cost_customer: 10.0,
       total: Number(total),
-      owner_note: `Baixa via Mercado Pago Checkout Pro - Payment ID: ${payment.id}, Ref: ${external_reference}`,
+      owner_note: `Baixa via Mercado Pago - Payment ID: ${payment.id}, Ref: ${external_reference}`,
     };
 
-    // Cria ordem na Nuvemshop
-    const response = await axios.post("/orders", payload);
-    console.log("✅ Ordem criada na Nuvemshop:", response.data?.id);
-
-    return res.status(200).json({ status: "received" });
+    await axios.post("/orders", payload);
+    console.log("✅ Ordem criada via webhook MP:", payment.id);
   } catch (error) {
-    console.error(
-      "❌ Erro ao processar webhook:",
-      error?.response?.data || error.message || error
-    );
-    // Ainda retornamos 200 para o MP não fazer retry infinito enquanto corrigimos
-    return res.status(200).json({ status: "error-logged" });
+    console.error("Webhook MP error:", error?.response?.data || error.message || error);
   }
 });
 
-/* ------------------------------ FUNÇÃO DE VERIFICAÇÃO HMAC (Nuvemshop) ------------------------------ */
+/** LGPD endpoints — precisam do RAW body */
 function verifyWebhook(rawBody, hmacHeader) {
   if (!hmacHeader) return false;
   const calculatedHmac = crypto
@@ -127,54 +97,31 @@ function verifyWebhook(rawBody, hmacHeader) {
   return hmacHeader === calculatedHmac;
 }
 
-/* ------------------------------ LGPD: STORE REDACT ------------------------------ */
-router.post("/store-redact", express.raw({ type: "application/json" }), async (req, res) => {
+router.post("/store-redact", express.raw({ type: "application/json" }), (req, res) => {
   const rawBody = req.body.toString("utf-8");
-  const hmacHeader =
-    req.headers["x-linkedstore-hmac-sha256"] || req.headers["http_x_linkedstore_hmac_sha256"];
-
-  if (!verifyWebhook(rawBody, hmacHeader)) {
-    console.error("❌ HMAC inválido em store-redact");
-    return res.status(401).send("Assinatura inválida");
-  }
-
+  const hmacHeader = req.headers["x-linkedstore-hmac-sha256"] || req.headers["http_x_linkedstore_hmac_sha256"];
+  if (!verifyWebhook(rawBody, hmacHeader)) return res.status(401).send("Assinatura inválida");
   const { store_id } = JSON.parse(rawBody);
-  console.log(`🧹 LGPD: Deletando dados da loja ${store_id}`);
-  return res.status(200).send("OK");
+  console.log(`LGPD store-redact loja ${store_id}`);
+  res.status(200).send("OK");
 });
 
-/* ------------------------------ LGPD: CUSTOMERS REDACT ------------------------------ */
-router.post("/customers-redact", express.raw({ type: "application/json" }), async (req, res) => {
+router.post("/customers-redact", express.raw({ type: "application/json" }), (req, res) => {
   const rawBody = req.body.toString("utf-8");
-  const hmacHeader =
-    req.headers["x-linkedstore-hmac-sha256"] || req.headers["http_x_linkedstore_hmac_sha256"];
-
-  if (!verifyWebhook(rawBody, hmacHeader)) {
-    console.error("❌ HMAC inválido em customers-redact");
-    return res.status(401).send("Assinatura inválida");
-  }
-
+  const hmacHeader = req.headers["x-linkedstore-hmac-sha256"] || req.headers["http_x_linkedstore_hmac_sha256"];
+  if (!verifyWebhook(rawBody, hmacHeader)) return res.status(401).send("Assinatura inválida");
   const { store_id, customer, orders_to_redact } = JSON.parse(rawBody);
-  console.log(
-    `🧹 LGPD: Deletando dados do cliente ${customer?.id} da loja ${store_id}, pedidos: ${orders_to_redact}`
-  );
-  return res.status(200).send("OK");
+  console.log(`LGPD customers-redact ${customer?.id} loja ${store_id} pedidos: ${orders_to_redact}`);
+  res.status(200).send("OK");
 });
 
-/* ------------------------------ LGPD: CUSTOMERS DATA REQUEST ------------------------------ */
-router.post("/customers-data-request", express.raw({ type: "application/json" }), async (req, res) => {
+router.post("/customers-data-request", express.raw({ type: "application/json" }), (req, res) => {
   const rawBody = req.body.toString("utf-8");
-  const hmacHeader =
-    req.headers["x-linkedstore-hmac-sha256"] || req.headers["http_x_linkedstore_hmac_sha256"];
-
-  if (!verifyWebhook(rawBody, hmacHeader)) {
-    console.error("❌ HMAC inválido em customers-data-request");
-    return res.status(401).send("Assinatura inválida");
-  }
-
+  const hmacHeader = req.headers["x-linkedstore-hmac-sha256"] || req.headers["http_x_linkedstore_hmac_sha256"];
+  if (!verifyWebhook(rawBody, hmacHeader)) return res.status(401).send("Assinatura inválida");
   const { store_id, customer } = JSON.parse(rawBody);
-  console.log(`📄 LGPD: Requisição de dados do cliente ${customer?.id} da loja ${store_id}`);
-  return res.status(200).send("OK");
+  console.log(`LGPD data-request cliente ${customer?.id} loja ${store_id}`);
+  res.status(200).send("OK");
 });
 
 module.exports = router;
