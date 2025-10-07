@@ -24,9 +24,9 @@ module.exports = async function createCheckout(req, res) {
       ],
       notification_url: `${process.env.BACK_URL}/webhooks/order-paid`,   // 👈 seu webhook
       back_urls: {
-        success: `${process.env.FRONT_URL}/checkout/sucesso`,            // 👈 páginas do FRONT
-        pending: `${process.env.FRONT_URL}/checkout/pendente`,
-        failure: `${process.env.FRONT_URL}/checkout/erro`,
+        success: `${process.env.FRONT_URL}/success`,            // 👈 páginas do FRONT
+        pending: `${process.env.FRONT_URL}/pendente`,
+        failure: `${process.env.FRONT_URL}/erro`,
       },
       auto_return: "approved",
       external_reference: orderId, // 👈 vai cair no payment.external_reference
