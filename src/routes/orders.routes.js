@@ -37,9 +37,9 @@ router.post("/create-checkout", async (req, res) => {
           identification: { type: "CPF", number: cliente.document },
         },
         back_urls: {
-          success: "https://vinicola-amana.com/success", // Troque pelo seu domínio real
-          pending: "https://vinicola-amana.com/pending",
-          failure: "https://vinicola-amana.com/failure",
+          success: "https://loja.vinicolaamana.com.br/success", // Troque pelo seu domínio real
+          pending: "https://loja.vinicolaamana.com.br/pending",
+          failure: "https://loja.vinicolaamana.com.br/failure",
         },
         auto_return: "approved",
         external_reference: `order_${Date.now()}`,
