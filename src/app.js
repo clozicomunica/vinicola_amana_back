@@ -11,16 +11,16 @@ const errorHandler = require("./middlewares/error.middleware");
 
 const app = express();
 
-app.use(cors({
+const corsOptions = {
   origin: [
-    "https://vinicolaamana.vercel.app", 
-    "http://localhost:5173",            
+    "https://vinicolaamana.vercel.app",
+    "http://localhost:5173",
   ],
   credentials: true,
-}));
+};
 
-
-app.options("*", cors());
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
 
 app.use(express.json());
