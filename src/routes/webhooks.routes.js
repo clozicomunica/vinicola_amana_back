@@ -2,7 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const { MercadoPagoConfig, Payment } = require("mercadopago");
-const axios = require("../axiosClient"); // <- caminho corrigido
+const axios = require("../utils/axiosClient");
 const crypto = require("crypto");
 
 const mpClient = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
