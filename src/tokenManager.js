@@ -2,7 +2,9 @@ const fs = require("fs/promises");
 const path = require("path");
 const axios = require("axios");
 
-const TOKEN_FILE = path.join(__dirname, "tokens.json");
+const TOKEN_FILE = path.resolve(__dirname, "..", "tokens.json");
+
+const FALLBACK_ACCESS_TOKEN = process.env.NUVEMSHOP_ACCESS_TOKEN;
 
 const {
   NUVEMSHOP_CLIENT_ID,
@@ -12,15 +14,23 @@ const {
 } = process.env;
 
 async function readTokens() {
-  const data = await fs.readFile(TOKEN_FILE, "utf-8");
-  return JSON.parse(data);
+  try {
+    const data = await fs.readFile(TOKEN_FILE, "utf-8");
+    return JSON.parse(data);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.warn("Não foi possível ler tokens.json:", error.message);
+    }
+    return null;
+  }
 }
 
 async function saveTokens(tokens) {
   await fs.writeFile(TOKEN_FILE, JSON.stringify(tokens, null, 2));
 }
 
-async function isTokenExpired(expires_at) {
+function isTokenExpired(expires_at) {
+  if (!expires_at) return false;
   return Date.now() >= expires_at;
 }
 
@@ -63,7 +73,24 @@ async function refreshAccessToken(refresh_token) {
 async function getValidAccessToken() {
   const tokens = await readTokens();
 
-  if (await isTokenExpired(tokens.expires_at)) {
+  if (!tokens || !tokens.access_token) {
+    if (FALLBACK_ACCESS_TOKEN) {
+      return FALLBACK_ACCESS_TOKEN;
+    }
+
+    throw new Error(
+      "Nenhum token de acesso disponível. Gere o tokens.json ou defina NUVEMSHOP_ACCESS_TOKEN."
+    );
+  }
+
+  if (isTokenExpired(tokens.expires_at)) {
+    if (!tokens.refresh_token) {
+      console.warn(
+        "Token expirado e sem refresh_token disponível. Usando token armazenado mesmo assim."
+      );
+      return tokens.access_token;
+    }
+
     console.log("🔄 Token expirado. Renovando...");
     const newTokens = await refreshAccessToken(tokens.refresh_token);
     return newTokens.access_token;
