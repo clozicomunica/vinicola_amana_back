@@ -11,16 +11,50 @@ const errorHandler = require("./middlewares/error.middleware");
 
 const app = express();
 
-app.use(cors({
-  origin: [
-    "https://vinicolaamana.vercel.app", 
-    "http://localhost:5173",            
-  ],
+const defaultOrigins = [
+  "https://vinicolaamana.vercel.app",
+  "http://localhost:5173",
+  "https://vinicolaamana.com.br",
+];
+
+const extraOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const originMatchers = [
+  ...defaultOrigins,
+  ...extraOrigins,
+  /^https:\/\/[^.]+\.lojavirtualnuvem\.com\.br$/,
+  /^https:\/\/[^.]+\.tiendanube\.com$/,
+];
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    const isAllowed = originMatchers.some((matcher) => {
+      if (matcher instanceof RegExp) {
+        return matcher.test(origin);
+      }
+
+      return matcher === origin;
+    });
+
+    if (isAllowed) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`Origin ${origin} not allowed by CORS`));
+  },
   credentials: true,
-}));
+  optionsSuccessStatus: 204,
+};
 
-
-app.options("*", cors());
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
 
 app.use(express.json());
