@@ -1,62 +1,91 @@
+// routes/orders.routes.js
 const express = require("express");
 const router = express.Router();
 const { MercadoPagoConfig, Preference } = require("mercadopago");
 require("dotenv").config();
 
-// Configura Mercado Pago
+const MP_MODE = process.env.MP_MODE || "test"; // "test" | "prod"
+
 const mpClient = new MercadoPagoConfig({
-  accessToken: process.env.MP_ACCESS_TOKEN, // deixe o token no .env
+  accessToken: process.env.MP_ACCESS_TOKEN || "",
 });
 
-// Armazenamento temporário (substitua por MongoDB/Redis em produção)
-const tempStorage = new Map();
-
-// Endpoint para criar checkout com Mercado Pago Checkout Pro
 router.post("/create-checkout", async (req, res) => {
   try {
-    const { produtos, cliente, total } = req.body;
-
-    // Validação básica
-    if (!produtos?.length || !cliente?.name || !cliente?.email || !cliente?.document || !total) {
-      return res.status(400).json({ error: "Dados incompletos (produtos, cliente ou total)" });
+    const { produtos = [], cliente = {}, total } = req.body || {};
+    if (!produtos.length || !total) {
+      return res.status(400).json({ error: "Dados incompletos (produtos/total)" });
     }
 
     const preference = new Preference(mpClient);
 
-    const response = await preference.create({
-      body: {
-        items: produtos.map(item => ({
-          title: item.name,
-          quantity: item.quantity,
-          unit_price: Number(item.price),
-          currency_id: "BRL",
+    const items = produtos.map((p) => ({
+      title: p.name,
+      quantity: Number(p.quantity || 1),
+      unit_price: Number(p.price),
+      currency_id: "BRL",
+    }));
+
+    const back_urls = {
+      success: `${process.env.FRONT_URL || ""}/checkout/sucesso`,
+      pending: `${process.env.FRONT_URL || ""}/checkout/pendente`,
+      failure: `${process.env.FRONT_URL || ""}/checkout/erro`,
+    };
+
+    // Em TESTE não enviamos 'payer' para evitar conflito de partes
+    const payer =
+      MP_MODE === "prod"
+        ? {
+            name: cliente.name,
+            email: cliente.email,
+            identification: cliente.document
+              ? { type: "CPF", number: cliente.document }
+              : undefined,
+          }
+        : undefined;
+
+    const body = {
+      items,
+      back_urls,
+      auto_return: "approved",
+      notification_url: `${process.env.BACK_URL || ""}/webhooks/order-paid`,
+      external_reference: `order_${Date.now()}`,
+      metadata: {
+        produtos: produtos.map((p) => ({
+          variant_id: p.variant_id || 0,
+          quantity: Number(p.quantity || 1),
+          price: Number(p.price),
+          name: p.name || "",
         })),
-        payer: {
+        cliente: {
           name: cliente.name,
           email: cliente.email,
-          identification: { type: "CPF", number: cliente.document },
+          document: cliente.document,
+          address: cliente.address,
+          city: cliente.city,
+          state: cliente.state,
+          zipcode: cliente.zipcode,
+          complement: cliente.complement,
         },
-        back_urls: {
-          success: "https://vinicola-amana.com/success", // Troque pelo seu domínio real
-          pending: "https://vinicola-amana.com/pending",
-          failure: "https://vinicola-amana.com/failure",
-        },
-        auto_return: "approved",
-        external_reference: `order_${Date.now()}`,
+        total: Number(total),
       },
+      ...(payer ? { payer } : {}),
+    };
+
+    const pref = await preference.create({ body });
+    const redirect = pref.init_point || pref.sandbox_init_point;
+    if (!redirect) return res.status(500).json({ error: "MP não retornou init_point" });
+
+    return res.json({
+      redirect_url: redirect,
+      preference_id: pref.id,
+      mode: MP_MODE,
     });
-
-    const init_point = response.init_point; // URL para redirecionar o cliente
-
-    // Armazena dados temporariamente para uso no webhook
-    tempStorage.set(response.external_reference, { produtos, cliente, total });
-
-    res.json({ redirect_url: init_point });
   } catch (error) {
-    console.error("Erro ao criar checkout:", error.response?.data || error.message);
-    res.status(500).json({
-      error: error.response?.data?.message || "Erro ao criar checkout",
-    });
+    console.error("Erro MP create-checkout:", error?.response?.data || error);
+    return res
+      .status(500)
+      .json({ error: error?.response?.data?.message || error?.message || "Erro ao criar checkout" });
   }
 });
 
