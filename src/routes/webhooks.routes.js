@@ -2,13 +2,14 @@
 const express = require("express");
 const router = express.Router();
 const { MercadoPagoConfig, Payment } = require("mercadopago");
-const axios = require("../utils/axiosClient"); // seu client p/ Nuvemshop
+// Ajuste o caminho do axios da Nuvemshop conforme seu projeto:
+const axios = require("../utils/axiosClient"); // ou: require("../axiosClient")
 const crypto = require("crypto");
 require("dotenv").config();
 
 /** =================== MERCADO PAGO CONFIG =================== */
 const mpClient = new MercadoPagoConfig({
-  accessToken: process.env.MP_ACCESS_TOKEN || "", // TEST-... em sandbox / APP_USR-... em prod
+  accessToken: process.env.MP_ACCESS_TOKEN || "", // APP_USR-... ou TEST-...
 });
 const MP_MODE = process.env.MP_MODE || "test"; // "test" | "prod"
 
@@ -16,77 +17,86 @@ const MP_MODE = process.env.MP_MODE || "test"; // "test" | "prod"
 const APP_SECRET = process.env.NUVEMSHOP_CLIENT_SECRET || "";
 
 /** ===================================================================
- *  HEALTHCHECK (alguns provedores pingam GET só pra checar disponibilidade)
+ *  HEALTHCHECK
  * ====================================================================*/
 router.get("/order-paid", (req, res) => res.status(200).send("OK"));
 
 /** ===================================================================
  *  MERCADO PAGO — WEBHOOK DE PAGAMENTO
- *  Observações:
- *   - MP pode enviar:
- *      1) IPN antigo:   GET/POST ?type=payment&id=123
- *      2) JSON novo A:  { "type": "payment", "data": { "id": "123" } }
- *      3) JSON novo B:  { "action": "...", "data": { "id": "123" } }
- *   - Esta rota usa um parser JSON **apenas aqui** para não conflitar com LGPD (raw).
+ *  Formatos aceitos:
+ *    - IPN antigo:   GET/POST ?type=payment&id=123
+ *    - JSON novo A:  { "type": "payment", "data": { "id": "123" } }
+ *    - JSON novo B:  { "action": "...", "data": { "id": "123" } }
  * ====================================================================*/
 router.post(
   "/order-paid",
-  // aceita application/json, text/plain e */* (há variação por gateway/proxy)
+  // aceita application/json, text/plain e */*
   express.json({ type: ["application/json", "text/plain", "*/*"] }),
   async (req, res) => {
     try {
-      // 1) Descobrir o payment_id em qualquer formato
       const q = req.query || {};
       const b = req.body || {};
 
-      // IPN antigo (query)
-      let paymentId = q.id || q["data.id"];
+      // 1) Descobrir o payment_id em qualquer formato
+      let paymentId =
+        q.id ||
+        q["data.id"] ||
+        b?.data?.id ||
+        b?.id ||
+        b?.payment_id;
 
-      // Formatos novos
-      if (!paymentId) paymentId = b?.data?.id || b?.id;
-
-      // Nada de ID → só confirma recebimento pro MP não ficar em retry infinito
       if (!paymentId) {
-        console.log("[MP Webhook] payload sem id. Ignorado.");
+        console.warn("[MP Webhook] Payload sem id. Ignorado.", { query: q, body: b });
         return res.status(200).json({ status: "ignored-no-id" });
       }
 
       // 2) Buscar o pagamento no MP
       const paymentClient = new Payment(mpClient);
-      const payment = await paymentClient.get({ id: String(paymentId) });
+      let payment;
+      try {
+        payment = await paymentClient.get({ id: String(paymentId) });
+      } catch (err) {
+        console.error("[MP Webhook] Falha ao buscar payment no MP:", err?.response?.data || err?.message || err);
+        // Responde 200 para não gerar retry infinito enquanto você depura
+        return res.status(200).json({ status: "mp-fetch-error" });
+      }
 
-      console.log(
-        "[MP Webhook] payment_id:", payment.id,
-        "status:", payment.status,
-        "env:", MP_MODE
-      );
+      console.log("[MP Webhook] OK", {
+        payment_id: payment.id,
+        status: payment.status,
+        status_detail: payment.status_detail,
+        mode: MP_MODE,
+        pref: payment.preference_id,
+        ext_ref: payment.external_reference,
+      });
 
       // 3) Só processa quando aprovado
       if (payment.status !== "approved") {
-        return res.status(200).json({ status: "not-approved" });
+        return res.status(200).json({ status: "not-approved", payment_status: payment.status });
       }
 
-      // 4) Pega dados que você enviou na preferência (metadata)
+      // 4) Metadados enviados na preferência
       const meta = payment.metadata || {};
       const produtos = meta.produtos;
       const cliente  = meta.cliente;
       const total    = meta.total;
 
       if (!produtos || !cliente || typeof total === "undefined") {
-        // Se necessário, aqui você poderia recuperar dados pelo external_reference no seu DB
         console.error("❌ Metadados ausentes no pagamento:", {
+          preference_id: payment.preference_id,
           external_reference: payment.external_reference,
         });
+        // Se você usa DB próprio, aqui poderia recuperar pelo external_reference
         return res.status(200).json({ status: "missing-metadata" });
       }
 
-      // 5) (opcional) validações extras de segurança
+      // (Opcional) Validações extras
       // if (Number(payment.transaction_amount) !== Number(total)) { ... }
       // if (payment.currency_id !== "BRL") { ... }
 
-      // 6) Monta payload para criar ordem na Nuvemshop
+      // 5) Monta payload para criar ordem na Nuvemshop
       const uf = cliente.state || "SP";
-      const isoNow = new Date().toISOString(); // deixe ISO; se precisar -03:00, trate no app de destino
+      const isoNow = new Date().toISOString();
 
       const payload = {
         gateway: "offline",
@@ -107,7 +117,7 @@ router.post(
         billing_address: {
           address: cliente.address || "",
           city: cliente.city || "",
-          province: uf,      // UF
+          province: uf, // UF
           country: "BR",
           zipcode: cliente.zipcode || "",
         },
@@ -121,20 +131,26 @@ router.post(
         shipping_pickup_type: "ship",
         shipping: "Correios",
         shipping_option: "PAC",
-        shipping_cost_customer: 10.0, // ajuste se tiver cálculo real de frete
+        shipping_cost_customer: 10.0, // ajuste conforme seu cálculo real de frete
         total: Number(total || 0),
         owner_note: `Baixa via Mercado Pago Checkout Pro - Payment ID: ${payment.id}, Ref: ${payment.external_reference || "-"}`,
       };
 
-      // 7) Cria a ordem na Nuvemshop
-      const nsResp = await axios.post("/orders", payload);
-      console.log("✅ Ordem criada na Nuvemshop:", nsResp?.data?.id);
+      // 6) Cria a ordem na Nuvemshop
+      try {
+        const nsResp = await axios.post("/orders", payload);
+        console.log("✅ Ordem criada na Nuvemshop:", nsResp?.data?.id);
+      } catch (e) {
+        console.error("❌ Erro ao criar ordem na Nuvemshop:", e?.response?.data || e?.message || e);
+        // Mesmo com erro na Nuvemshop, responda 200 ao MP para evitar repetição excessiva
+        return res.status(200).json({ status: "nuvemshop-error-logged" });
+      }
 
-      // 8) Responde OK ao MP
+      // 7) Responde OK ao MP
       return res.status(200).json({ status: "received" });
     } catch (error) {
-      // Importante: sempre responder 200 para não gerar retry agressivo do MP
-      console.error("❌ Erro ao processar webhook MP:", error?.response?.data || error?.message || error);
+      console.error("❌ Erro inesperado no webhook MP:", error?.response?.data || error?.message || error);
+      // Importante: normalmente manter 200 evita retry agressivo; mude para 500 se quiser forçar retry durante debug
       return res.status(200).json({ status: "error-logged" });
     }
   }
@@ -153,8 +169,7 @@ function verifyWebhook(rawBody, hmacHeader) {
 }
 
 /** ===================================================================
- *  LGPD — STORE REDACT
- *  (usa RAW para validar HMAC)
+ *  LGPD — STORE REDACT (usa RAW para validar HMAC)
  * ====================================================================*/
 router.post("/store-redact", express.raw({ type: "application/json" }), async (req, res) => {
   try {
